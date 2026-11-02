@@ -115,6 +115,11 @@ const INITIAL_STUDENTS: Siswa[] = [
   { id: 'g-2', nisn: '198205122010012005', nama: 'Sri Wahyuni, S.Pd', tanggal_lahir: '1982-05-12', kelas_id: 'k-guru', sudah_memilih: false, waktu_memilih: null, kategori: 'guru' }
 ];
 
+const INITIAL_TEACHERS: Siswa[] = [
+  { id: 'g-1', nisn: '197501012005011001', nama: 'Drs. H. Mulyadi, M.Pd', tanggal_lahir: '1975-01-01', kelas_id: 'k-guru', sudah_memilih: false, waktu_memilih: null, kategori: 'guru' },
+  { id: 'g-2', nisn: '198205122010012005', nama: 'Sri Wahyuni, S.Pd', tanggal_lahir: '1982-05-12', kelas_id: 'k-guru', sudah_memilih: false, waktu_memilih: null, kategori: 'guru' }
+];
+
 const INITIAL_SETTINGS: Pengaturan = {
   id: 1,
   nama_sekolah: 'SMP NEGERI 2 KOTA BOGOR',
@@ -143,6 +148,21 @@ class DatabaseService {
     }
     if (!localStorage.getItem(STORAGE_KEYS.SISWA)) {
       localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(INITIAL_STUDENTS));
+    } else {
+      // Pastikan demo guru selalu ada untuk kemudahan pengujian
+      const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.SISWA) || '[]');
+      if (Array.isArray(current) && current.length > 0) {
+        let modified = false;
+        INITIAL_TEACHERS.forEach(t => {
+          if (!current.find(s => s.nisn === t.nisn)) {
+            current.push(t);
+            modified = true;
+          }
+        });
+        if (modified) {
+          localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(current));
+        }
+      }
     }
     if (!localStorage.getItem(STORAGE_KEYS.PENGATURAN)) {
       localStorage.setItem(STORAGE_KEYS.PENGATURAN, JSON.stringify(INITIAL_SETTINGS));
@@ -358,8 +378,8 @@ class DatabaseService {
       list = [...INITIAL_CLASSES];
     }
 
-    // Ensure Guru unit exists
-    const hasGuru = list.some(k => k.id === 'k-guru' || k.nama_kelas === 'DEWAN GURU & STAF');
+    // Ensure at least one Guru/Staf unit exists (Tingkat 0)
+    const hasGuru = list.some(k => Number(k.tingkat) === 0);
     if (!hasGuru) {
       list.push({ id: 'k-guru', nama_kelas: 'DEWAN GURU & STAF', tingkat: 0, wali_kelas: 'Kepala Sekolah' });
     }
@@ -421,8 +441,25 @@ class DatabaseService {
     if (kelas.id) {
       // Update lokal
       const index = list.findIndex(k => k.id === kelas.id);
-      saved = { ...list[index], ...kelas, id: kelas.id };
-      if (index >= 0) list[index] = saved;
+      if (index >= 0) {
+        saved = { 
+          ...list[index], 
+          ...kelas, 
+          id: kelas.id,
+          tingkat: Number(kelas.tingkat) 
+        };
+        list[index] = saved;
+      } else {
+        // Jika ID diberikan tapi tidak ada di list, buat baru dengan ID tersebut
+        saved = {
+          id: kelas.id,
+          nama_kelas: kelas.nama_kelas.toUpperCase().trim(),
+          tingkat: Number(kelas.tingkat),
+          wali_kelas: kelas.wali_kelas || '',
+          created_at: new Date().toISOString()
+        };
+        list.push(saved);
+      }
     } else {
       // Create lokal
       saved = {
@@ -591,68 +628,102 @@ class DatabaseService {
   }
 
   public async findSiswaByNisnAndDob(nisn: string, dob: string): Promise<Siswa | null> {
-    const cleanNisn = nisn.trim();
-    // Jika input 4 digit, anggap itu tahun lahir
-    const isYearOnly = dob.trim().length === 4 && !isNaN(parseInt(dob.trim()));
-    const cleanDob = isYearOnly ? dob.trim() : normalizeDate(dob);
+    const cleanNisnInput = String(nisn).trim().replace(/[^0-9a-zA-Z]/g, '');
+    const cleanDobRaw = String(dob).trim();
+    
+    // Deteksi jika input password adalah tahun saja (4 digit)
+    const isYearOnly = cleanDobRaw.length === 4 && /^\d{4}$/.test(cleanDobRaw);
+    const cleanDobInput = isYearOnly ? cleanDobRaw : normalizeDate(cleanDobRaw);
 
+    console.log(`[Auth] Attempting login for Identifier: ${cleanNisnInput}, Password: ${cleanDobRaw} (isYearOnly: ${isYearOnly}, normalized: ${cleanDobInput})`);
+
+    if (!cleanNisnInput || !cleanDobInput) {
+      console.warn('[Auth] Invalid input: empty NISN or DOB');
+      return null;
+    }
+
+    let foundSiswa: Siswa | null = null;
+
+    // 1. Coba cari di Supabase (jika aktif)
     if (this.isUsingSupabase()) {
       try {
         let query = this.supabase!
           .from('siswa')
           .select('*, kelas(nama_kelas)')
-          .eq('nisn', cleanNisn);
+          .eq('nisn', cleanNisnInput);
         
         if (isYearOnly) {
-          // PostgreSQL pattern match for YYYY-%
-          query = query.like('tanggal_lahir', `${cleanDob}-%`);
+          // Pencarian berdasarkan tahun saja (untuk Guru)
+          query = query
+            .gte('tanggal_lahir', `${cleanDobInput}-01-01`)
+            .lte('tanggal_lahir', `${cleanDobInput}-12-31`);
         } else {
-          query = query.eq('tanggal_lahir', cleanDob);
+          // Pencarian tanggal lahir lengkap (untuk Siswa)
+          query = query.eq('tanggal_lahir', cleanDobInput);
         }
 
         const { data, error } = await query.maybeSingle();
         if (data && !error) {
-          return {
+          console.log('[Auth] Found voter in Supabase:', data.nama);
+          foundSiswa = {
             ...data,
             kelas_nama: data.kelas?.nama_kelas || '-'
           };
         }
       } catch (e) {
-        console.warn('Supabase findSiswaByNisnAndDob fallback', e);
+        console.warn('[Auth] Supabase lookup exception:', e);
       }
     }
 
-    const students = await this.getRawSiswaList();
-    const found = students.find(s => {
-      const matchNisn = s.nisn === cleanNisn;
-      if (!matchNisn) return false;
+    // 2. Jika belum ditemukan di Supabase, cari di database lokal (IndexedDB/LocalStorage)
+    if (!foundSiswa) {
+      const students = await this.getRawSiswaList();
+      console.log(`[Auth] Searching in ${students.length} local records...`);
+      
+      const found = students.find(s => {
+        // Bersihkan NISN tersimpan untuk perbandingan
+        const sNisn = String(s.nisn || '').trim().replace(/[^0-9a-zA-Z]/g, '');
+        if (sNisn !== cleanNisnInput) return false;
 
-      if (isYearOnly) {
-        // Cocokkan tahun saja (4 digit pertama dari YYYY-MM-DD)
-        return s.tanggal_lahir.startsWith(cleanDob);
-      } else {
-        return normalizeDate(s.tanggal_lahir) === cleanDob;
+        // Normalisasi tanggal tersimpan
+        const storedDob = normalizeDate(s.tanggal_lahir);
+        if (!storedDob) return false;
+
+        if (isYearOnly) {
+          // Guru: Bandingkan tahun saja (prefix 4 digit YYYY)
+          return storedDob.startsWith(cleanDobInput);
+        } else {
+          // Siswa: Bandingkan tanggal lengkap (YYYY-MM-DD)
+          return storedDob === cleanDobInput;
+        }
+      });
+
+      if (found) {
+        console.log('[Auth] Found voter in Local DB:', found.nama);
+        const kelasList = await this.getKelasList();
+        const targetKelas = kelasList.find(k => k.id === found.kelas_id);
+        foundSiswa = {
+          ...found,
+          kelas_nama: targetKelas?.nama_kelas || found.kelas_nama || 'Umum'
+        };
       }
-    });
+    }
 
-    if (!found) return null;
+    if (!foundSiswa) {
+      console.warn(`[Auth] Voter NOT FOUND: ${cleanNisnInput} with ${isYearOnly ? 'Year' : 'DOB'} ${cleanDobInput}`);
+    }
 
-    const kelasList = await this.getKelasList();
-    const targetKelas = kelasList.find(k => k.id === found.kelas_id);
-
-    return {
-      ...found,
-      kelas_nama: targetKelas?.nama_kelas || found.kelas_nama || 'Umum'
-    };
+    return foundSiswa;
   }
 
   public async saveSiswa(siswa: Omit<Siswa, 'id'> & { id?: string }): Promise<Siswa> {
     const list = await this.getRawSiswaList();
     let saved: Siswa;
 
-    const cleanNisn = siswa.nisn.trim();
+    const cleanNisn = siswa.nisn.trim().replace(/[^0-9a-zA-Z]/g, '');
     const cleanNama = siswa.nama.trim();
     const cleanDob = normalizeDate(siswa.tanggal_lahir);
+    if (!cleanDob) throw new Error('Format tanggal lahir tidak valid.');
 
     // Cek duplikasi NISN
     const duplicate = list.find(s => s.nisn === cleanNisn && s.id !== siswa.id);
@@ -667,7 +738,13 @@ class DatabaseService {
       resolvedKelasId = kelasList[0].id;
     }
 
+    const targetKelas = kelasList.find(k => k.id === resolvedKelasId);
+    const resolvedKategori = (siswa as any).kategori || (Number(targetKelas?.tingkat) === 0 ? 'guru' : 'siswa');
+
     if (siswa.id) {
+      const index = list.findIndex(s => s.id === siswa.id);
+      if (index === -1) throw new Error('Data pemilih tidak ditemukan.');
+      
       saved = {
         ...list[index],
         ...siswa,
@@ -676,9 +753,9 @@ class DatabaseService {
         tanggal_lahir: cleanDob,
         kelas_id: resolvedKelasId,
         id: siswa.id,
-        kategori: (siswa as any).kategori || list[index]?.kategori || 'siswa'
+        kategori: resolvedKategori
       };
-      if (index >= 0) list[index] = saved;
+      list[index] = saved;
     } else {
       saved = {
         id: 's-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
@@ -688,7 +765,7 @@ class DatabaseService {
         kelas_id: resolvedKelasId,
         sudah_memilih: false,
         waktu_memilih: null,
-        kategori: (siswa as any).kategori || (resolvedKelasId === 'k-guru' ? 'guru' : 'siswa'),
+        kategori: resolvedKategori,
         created_at: new Date().toISOString()
       };
       list.push(saved);
@@ -920,6 +997,7 @@ class DatabaseService {
       }
 
       const assignedKelasId = targetKelasObj ? targetKelasObj.id : (kelasList[0]?.id || 'k-7a');
+      const resolvedKategori = (item as any).kategori || (Number(targetKelasObj?.tingkat) === 0 ? 'guru' : 'siswa');
 
       if (nisnMap.has(cleanNisn)) {
         if (updateIfExists) {
@@ -927,6 +1005,7 @@ class DatabaseService {
           currentList[idx].nama = cleanNama;
           currentList[idx].tanggal_lahir = cleanDob;
           currentList[idx].kelas_id = assignedKelasId;
+          currentList[idx].kategori = resolvedKategori;
           modifiedRecords.push(currentList[idx]);
           updated++;
         } else {
@@ -941,7 +1020,7 @@ class DatabaseService {
           kelas_id: assignedKelasId,
           sudah_memilih: false,
           waktu_memilih: null,
-          kategori: (item as any).kategori || (assignedKelasId === 'k-guru' ? 'guru' : 'siswa'),
+          kategori: resolvedKategori,
           created_at: new Date().toISOString()
         };
         currentList.push(newStudent);
@@ -1305,10 +1384,27 @@ class DatabaseService {
     const persentasePartisipasi = totalSiswa > 0 ? Number(((sudahMemilih / totalSiswa) * 100).toFixed(1)) : 0;
     const totalSuaraMasuk = candidates.reduce((acc, curr) => acc + (curr.total_suara || 0), 0);
 
-    const totalSiswaOnly = students.filter(s => s.kategori === 'siswa' || !s.kategori).length;
-    const totalGuru = students.filter(s => s.kategori === 'guru').length;
-    const siswaSudahMemilih = students.filter(s => (s.kategori === 'siswa' || !s.kategori) && s.sudah_memilih).length;
-    const guruSudahMemilih = students.filter(s => s.kategori === 'guru' && s.sudah_memilih).length;
+    const totalSiswaOnly = students.filter(s => {
+      const targetKelas = classes.find(k => k.id === s.kelas_id);
+      return (s.kategori === 'siswa' || !s.kategori) && (targetKelas ? targetKelas.tingkat !== 0 : true);
+    }).length;
+
+    const totalGuru = students.filter(s => {
+      const targetKelas = classes.find(k => k.id === s.kelas_id);
+      return s.kategori === 'guru' || (targetKelas ? targetKelas.tingkat === 0 : false);
+    }).length;
+
+    const siswaSudahMemilih = students.filter(s => {
+      const targetKelas = classes.find(k => k.id === s.kelas_id);
+      const isSiswa = (s.kategori === 'siswa' || !s.kategori) && (targetKelas ? targetKelas.tingkat !== 0 : true);
+      return isSiswa && s.sudah_memilih;
+    }).length;
+
+    const guruSudahMemilih = students.filter(s => {
+      const targetKelas = classes.find(k => k.id === s.kelas_id);
+      const isGuru = s.kategori === 'guru' || (targetKelas ? targetKelas.tingkat === 0 : false);
+      return isGuru && s.sudah_memilih;
+    }).length;
 
     return {
       totalSiswa,

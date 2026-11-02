@@ -41,7 +41,12 @@
 
         <router-link to="/admin/siswa" class="sidebar-link" @click="isMobileSidebarOpen = false">
           <i class="bi bi-people"></i>
-          <span>Siswa / User</span>
+          <span>Siswa</span>
+        </router-link>
+
+        <router-link to="/admin/guru" class="sidebar-link" @click="isMobileSidebarOpen = false">
+          <i class="bi bi-person-workspace"></i>
+          <span>Guru & Staf</span>
         </router-link>
 
         <router-link to="/admin/kandidat" class="sidebar-link" @click="isMobileSidebarOpen = false">

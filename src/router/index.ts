@@ -15,6 +15,7 @@ import AdminSiswaView from '../views/admin/AdminSiswaView.vue';
 import AdminKandidatView from '../views/admin/AdminKandidatView.vue';
 import AdminPerolehanSuaraView from '../views/admin/AdminPerolehanSuaraView.vue';
 import AdminPengaturanView from '../views/admin/AdminPengaturanView.vue';
+import AdminGuruView from '../views/admin/AdminGuruView.vue';
 
 const routes: RouteRecordRaw[] = [
   // Siswa Routes
@@ -72,6 +73,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminSiswa',
         component: AdminSiswaView,
         meta: { title: 'Manajemen Siswa & DPT - eOSIS' }
+      },
+      {
+        path: 'guru',
+        name: 'AdminGuru',
+        component: AdminGuruView,
+        meta: { title: 'Manajemen Guru & Staf - eOSIS' }
       },
       {
         path: 'kandidat',

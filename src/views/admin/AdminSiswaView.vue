@@ -4,13 +4,13 @@
     <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
       <div>
         <div class="d-flex align-items-center gap-2 mb-1">
-          <h1 class="h4 fw-bold text-dark mb-0">Manajemen Pemilih (DPT)</h1>
+          <h1 class="h4 fw-bold text-dark mb-0">Manajemen Siswa (DPT)</h1>
           <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-mono-numbers">
-            <i class="bi bi-database-check me-1"></i>Kapasitas Tak Terbatas
+            <i class="bi bi-mortarboard-fill me-1"></i>Siswa
           </span>
         </div>
         <p class="text-muted small mb-0">
-          Daftar Pemilih Tetap (DPT) Siswa & Guru SMP Negeri 2 Kota Bogor • Bebas tambah data tanpa batasan kuota
+          Kelola Daftar Pemilih Tetap (DPT) dari kategori siswa SMP Negeri 2 Kota Bogor
         </p>
       </div>
 
@@ -895,7 +895,7 @@ const kelasList = ref<Kelas[]>([]);
 
 const filterKelas = ref('all');
 const filterStatus = ref<'all' | 'sudah' | 'belum'>('all');
-const filterKategori = ref<'all' | 'siswa' | 'guru'>('all');
+const filterKategori = ref<'all' | 'siswa' | 'guru'>('siswa');
 const searchQuery = ref('');
 const alertMessage = ref('');
 

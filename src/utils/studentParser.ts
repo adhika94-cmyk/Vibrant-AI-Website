@@ -13,50 +13,63 @@ export function isValidUUID(str?: string | null): boolean {
  * Mendukung: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, YYYY/MM/DD, DD.MM.YYYY, dsb.
  */
 export function normalizeDate(dateStr?: string | null): string {
-  if (!dateStr) return '2011-01-01';
-  let str = String(dateStr).trim();
+  if (!dateStr) return '';
+  // Convert to string and handle potential variations
+  let str = String(dateStr).trim().replace(/['"]/g, '');
+  
+  if (!str) return '';
 
-  // Bersihkan karakter non-ASCII atau kutip
-  str = str.replace(/['"]/g, '').trim();
-
-  // Format 1: YYYY-MM-DD atau YYYY/MM/DD
-  const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  // Format 1: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+  const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
   if (ymdMatch) {
     const year = parseInt(ymdMatch[1], 10);
     const month = String(parseInt(ymdMatch[2], 10)).padStart(2, '0');
     const day = String(parseInt(ymdMatch[3], 10)).padStart(2, '0');
-    if (year >= 1990 && year <= 2030 && Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
+    if (year >= 1930 && year <= 2050) {
       return `${year}-${month}-${day}`;
     }
   }
 
-  // Format 2: DD/MM/YYYY atau DD-MM-YYYY atau DD.MM.YYYY
-  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  // Format 2: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
   if (dmyMatch) {
     const day = String(parseInt(dmyMatch[1], 10)).padStart(2, '0');
     const month = String(parseInt(dmyMatch[2], 10)).padStart(2, '0');
     const year = parseInt(dmyMatch[3], 10);
-    if (year >= 1990 && year <= 2030 && Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
+    if (year >= 1930 && year <= 2050) {
       return `${year}-${month}-${day}`;
     }
   }
 
-  // Coba parse dengan objek Date bawaan JavaScript
+  // Format Khusus: Hanya Tahun (4 digit)
+  const yearOnlyMatch = str.match(/^(\d{4})$/);
+  if (yearOnlyMatch) {
+    const year = parseInt(yearOnlyMatch[1], 10);
+    if (year >= 1930 && year <= 2050) {
+      return `${year}-01-01`;
+    }
+  }
+
+  // Try standard JS date parsing
   try {
+    // If it looks like ISO date already, don't use new Date() which might shift timezone
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+      return str.substring(0, 10);
+    }
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
       const year = d.getFullYear();
-      if (year >= 1990 && year <= 2030) {
+      if (year >= 1930 && year <= 2050) {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       }
     }
-  } catch {
-    // Fallback default
+  } catch (e) {
+    // ignore
   }
 
-  return '2011-01-01';
+  return '';
 }
 
 /**

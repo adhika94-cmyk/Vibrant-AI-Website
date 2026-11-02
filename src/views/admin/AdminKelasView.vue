@@ -3,8 +3,8 @@
     <!-- Page Header -->
     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
       <div>
-        <h1 class="h4 fw-bold text-dark mb-1">Manajemen Data Kelas</h1>
-        <p class="text-muted small mb-0">Kelola rombel kelas siswa SMP Negeri 2 Kota Bogor (Tingkat VII, VIII, IX)</p>
+        <h1 class="h4 fw-bold text-dark mb-1">Manajemen Data Kelas & Unit</h1>
+        <p class="text-muted small mb-0">Kelola rombel kelas siswa (VII, VIII, IX) dan unit kerja Guru/Staf SMP Negeri 2 Kota Bogor</p>
       </div>
 
       <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-1" @click="openAddModal" style="background-color: #1d4ed8;">
@@ -58,6 +58,14 @@
             >
               Kelas 9
             </button>
+            <button 
+              type="button" 
+              class="btn" 
+              :class="selectedTingkat === 0 ? 'btn-info text-white' : 'btn-outline-info'"
+              @click="selectedTingkat = 0"
+            >
+              Guru & Staf
+            </button>
           </div>
         </div>
 
@@ -106,8 +114,8 @@
                 <span class="text-dark small">{{ kelas.wali_kelas || '-' }}</span>
               </td>
               <td>
-                <span class="font-mono-numbers badge bg-primary-subtle text-primary border border-primary-subtle">
-                  {{ getStudentCount(kelas.id) }} Siswa
+                <span class="font-mono-numbers badge" :class="kelas.tingkat === 0 ? 'bg-info-subtle text-info border border-info-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'">
+                  {{ getStudentCount(kelas.id) }} {{ kelas.tingkat === 0 ? 'Pegawai' : 'Siswa' }}
                 </span>
               </td>
               <td class="text-end">
@@ -178,6 +186,7 @@
                   <option :value="7">Kelas VII (Tujuh)</option>
                   <option :value="8">Kelas VIII (Delapan)</option>
                   <option :value="9">Kelas IX (Sembilan)</option>
+                  <option :value="0">Unit Guru / Staf (Non-Siswa)</option>
                 </select>
               </div>
 
@@ -238,9 +247,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { dbService } from '../../services/db';
 import type { Kelas, Siswa } from '../../types';
 
+const route = useRoute();
 const kelasList = ref<Kelas[]>([]);
 const siswaList = ref<Siswa[]>([]);
 const selectedTingkat = ref<'all' | number>('all');
@@ -282,7 +293,9 @@ const filteredKelasList = computed(() => {
 function openAddModal() {
   isEditing.value = false;
   formError.value = '';
-  formData.value = { nama_kelas: '', tingkat: 7, wali_kelas: '' };
+  // Default tingkat mengikuti filter yang sedang aktif jika valid
+  const defaultTingkat = typeof selectedTingkat.value === 'number' ? selectedTingkat.value : 7;
+  formData.value = { nama_kelas: '', tingkat: defaultTingkat, wali_kelas: '' };
   showModal.value = true;
 }
 
@@ -343,6 +356,10 @@ async function deleteKelas() {
 }
 
 onMounted(() => {
+  if (route.query.tingkat !== undefined) {
+    const t = parseInt(route.query.tingkat as string);
+    if (!isNaN(t)) selectedTingkat.value = t;
+  }
   loadData();
 });
 </script>

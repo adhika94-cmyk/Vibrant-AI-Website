@@ -221,11 +221,27 @@
           <h2 class="h6 fw-bold text-dark mb-3 border-bottom pb-2">Aksi Cepat Panitia</h2>
 
           <div class="d-flex flex-column gap-2">
-            <router-link to="/admin/siswa" class="btn btn-light text-start border p-3 d-flex align-items-center gap-3">
-              <i class="bi bi-person-plus text-primary fs-5"></i>
+            <a href="/" target="_blank" class="btn btn-primary text-start border p-3 d-flex align-items-center gap-3 shadow-sm">
+              <i class="bi bi-box-arrow-up-right text-white fs-5"></i>
               <div>
-                <strong class="d-block text-dark small">Kelola Data Siswa & DPT</strong>
-                <small class="text-muted">Tambah siswa, import file CSV, reset hak suara</small>
+                <strong class="d-block text-white small">Buka Portal Pemilih (Uji Coba)</strong>
+                <small class="text-white-50">Cek login Siswa/Guru & alur voting</small>
+              </div>
+            </a>
+
+            <router-link to="/admin/siswa" class="btn btn-light text-start border p-3 d-flex align-items-center gap-3">
+              <i class="bi bi-people text-primary fs-5"></i>
+              <div>
+                <strong class="d-block text-dark small">Kelola Data Siswa</strong>
+                <small class="text-muted">Input NISN, import CSV, reset hak suara siswa</small>
+              </div>
+            </router-link>
+
+            <router-link to="/admin/guru" class="btn btn-light text-start border p-3 d-flex align-items-center gap-3">
+              <i class="bi bi-person-workspace text-info fs-5"></i>
+              <div>
+                <strong class="d-block text-dark small">Kelola Dewan Guru & Staf</strong>
+                <small class="text-muted">Input NIP, kelola data pengajar dan karyawan</small>
               </div>
             </router-link>
 

@@ -6,28 +6,24 @@
         <h2 class="h5 fw-bold text-dark mb-0">Portal Pemilih</h2>
         <small class="text-muted">Pilih kategori untuk masuk</small>
       </div>
-      <div class="btn-group btn-group-sm shadow-sm" role="group">
-        <input 
-          type="radio" 
-          class="btn-check" 
-          name="voterType" 
-          id="typeSiswa" 
-          v-model="voterType" 
-          value="siswa" 
-          autocomplete="off"
+      <div class="d-flex flex-wrap gap-2" role="group">
+        <button 
+          type="button" 
+          class="btn btn-sm px-3 fw-bold"
+          :class="voterType === 'siswa' ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="setVoterType('siswa')"
         >
-        <label class="btn btn-outline-primary px-3 fw-bold" for="typeSiswa">SISWA</label>
+          <i class="bi bi-mortarboard-fill me-1"></i>SISWA
+        </button>
 
-        <input 
-          type="radio" 
-          class="btn-check" 
-          name="voterType" 
-          id="typeGuru" 
-          v-model="voterType" 
-          value="guru" 
-          autocomplete="off"
+        <button 
+          type="button" 
+          class="btn btn-sm px-3 fw-bold"
+          :class="voterType === 'guru' ? 'btn-primary' : 'btn-outline-secondary'"
+          @click="setVoterType('guru')"
         >
-        <label class="btn btn-outline-primary px-3 fw-bold" for="typeGuru">GURU</label>
+          <i class="bi bi-person-workspace me-1"></i>GURU / STAF
+        </button>
       </div>
     </div>
 
@@ -49,7 +45,7 @@
             <i class="bi" :class="voterType === 'siswa' ? 'bi-card-text' : 'bi-person-badge'"></i>
           </span>
           <input 
-            v-model="form.identifier"
+            v-model.trim="form.identifier"
             type="text" 
             class="form-control border-start-0 ps-0 font-mono-numbers" 
             :placeholder="voterType === 'siswa' ? 'Contoh: 0089998881' : 'Contoh: 19750101...'"
@@ -81,11 +77,11 @@
           />
           <input 
             v-else
-            v-model="form.password"
+            v-model.trim="form.password"
             type="text" 
-            maxlength="4"
+            maxlength="10"
             class="form-control border-start-0 ps-0 font-mono-numbers" 
-            placeholder="4 Digit Tahun Lahir (Contoh: 1975)"
+            placeholder="Tahun Lahir (Contoh: 1975)"
             required
             autocomplete="current-password"
           />
@@ -144,6 +140,14 @@ const form = reactive({
   identifier: '',
   password: ''
 });
+
+// Watcher-like behavior via function
+function setVoterType(type: 'siswa' | 'guru') {
+  voterType.value = type;
+  error.value = '';
+  form.identifier = '';
+  form.password = '';
+}
 
 const demoAccounts = [
   { id: '0089998881', pass: '2011-08-17', name: 'Raden Arya (Siswa)', type: 'siswa' },
