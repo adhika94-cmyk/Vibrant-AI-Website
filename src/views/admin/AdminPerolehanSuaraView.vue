@@ -215,6 +215,14 @@
       </div>
     </div>
 
+    <!-- D3.JS REAL-TIME VISUALIZATION (GRAFIK BATANG & LINGKARAN) -->
+    <D3VoteChart 
+      :candidates="kandidatList" 
+      :total-votes="stats.totalSuaraMasuk" 
+      @refresh="refreshData" 
+      class="mb-4 no-print" 
+    />
+
     <!-- GRAFIK VISUAL PEROLEHAN SUARA -->
     <div class="card card-clean p-4 mb-4 no-print">
       <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
@@ -620,8 +628,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { dbService } from '../../services/db';
+import { realtimeService } from '../../services/realtime';
 import type { Statistics, Kandidat, Pengaturan, Kelas, Siswa } from '../../types';
 import ElectionCountdown from '../../components/ElectionCountdown.vue';
+import D3VoteChart from '../../components/D3VoteChart.vue';
 import { 
   exportRekapToExcel, 
   exportRekapToCsv, 
@@ -778,12 +788,18 @@ function showToast(msg: string) {
   }, 4000);
 }
 
+let unbindRealtimeVote: (() => void) | null = null;
+
 onMounted(() => {
   refreshData();
+  unbindRealtimeVote = realtimeService.onVoteEvent(() => {
+    refreshData();
+  });
 });
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval);
+  if (unbindRealtimeVote) unbindRealtimeVote();
 });
 </script>
 

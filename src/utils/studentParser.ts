@@ -10,17 +10,16 @@ export function isValidUUID(str?: string | null): boolean {
 
 /**
  * Normalisasi format tanggal lahir ke format standar YYYY-MM-DD
- * Mendukung: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, YYYY/MM/DD, DD.MM.YYYY, dsb.
+ * Mendukung: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, YYYY/MM/DD, DD.MM.YYYY, DD MM YYYY,
+ * 8-digit padat (DDMMYYYY atau YYYYMMDD), dan 4-digit tahun (YYYY).
  */
 export function normalizeDate(dateStr?: string | null): string {
   if (!dateStr) return '';
-  // Convert to string and handle potential variations
   let str = String(dateStr).trim().replace(/['"]/g, '');
-  
   if (!str) return '';
 
-  // Format 1: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
-  const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  // Format 1: YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD or YYYY MM DD
+  const ymdMatch = str.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})/);
   if (ymdMatch) {
     const year = parseInt(ymdMatch[1], 10);
     const month = String(parseInt(ymdMatch[2], 10)).padStart(2, '0');
@@ -30,8 +29,8 @@ export function normalizeDate(dateStr?: string | null): string {
     }
   }
 
-  // Format 2: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
-  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  // Format 2: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY or DD MM YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{4})/);
   if (dmyMatch) {
     const day = String(parseInt(dmyMatch[1], 10)).padStart(2, '0');
     const month = String(parseInt(dmyMatch[2], 10)).padStart(2, '0');
@@ -41,7 +40,35 @@ export function normalizeDate(dateStr?: string | null): string {
     }
   }
 
-  // Format Khusus: Hanya Tahun (4 digit)
+  // Format 3: 8 digit tanpa pemisah (contoh: 17082011 atau 20110817)
+  const digitsOnly = str.replace(/\D/g, '');
+  if (digitsOnly.length === 8) {
+    // Cek apakah 4 digit pertama merupakan tahun wajar (20110817)
+    const firstFour = parseInt(digitsOnly.substring(0, 4), 10);
+    if (firstFour >= 1930 && firstFour <= 2050) {
+      const month = digitsOnly.substring(4, 6);
+      const day = digitsOnly.substring(6, 8);
+      const mNum = parseInt(month, 10);
+      const dNum = parseInt(day, 10);
+      if (mNum >= 1 && mNum <= 12 && dNum >= 1 && dNum <= 31) {
+        return `${firstFour}-${month}-${day}`;
+      }
+    }
+
+    // Cek apakah 4 digit terakhir merupakan tahun wajar (17082011)
+    const lastFour = parseInt(digitsOnly.substring(4, 8), 10);
+    if (lastFour >= 1930 && lastFour <= 2050) {
+      const day = digitsOnly.substring(0, 2);
+      const month = digitsOnly.substring(2, 4);
+      const mNum = parseInt(month, 10);
+      const dNum = parseInt(day, 10);
+      if (mNum >= 1 && mNum <= 12 && dNum >= 1 && dNum <= 31) {
+        return `${lastFour}-${month}-${day}`;
+      }
+    }
+  }
+
+  // Format 4: Hanya Tahun (4 digit)
   const yearOnlyMatch = str.match(/^(\d{4})$/);
   if (yearOnlyMatch) {
     const year = parseInt(yearOnlyMatch[1], 10);
@@ -52,7 +79,6 @@ export function normalizeDate(dateStr?: string | null): string {
 
   // Try standard JS date parsing
   try {
-    // If it looks like ISO date already, don't use new Date() which might shift timezone
     if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
       return str.substring(0, 10);
     }
@@ -65,11 +91,72 @@ export function normalizeDate(dateStr?: string | null): string {
         return `${year}-${month}-${day}`;
       }
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
 
   return '';
+}
+
+/**
+ * Pembanding cerdas tanggal lahir / password pemilih.
+ * Membandingkan storedDob dan inputPass dengan toleransi format:
+ * - YYYY-MM-DD vs DD-MM-YYYY vs DD/MM/YYYY vs DD.MM.YYYY
+ * - 8 digit padat (17082011 atau 20110817)
+ * - 4 digit tahun kelahiran saja (2011 atau 1975)
+ */
+export function matchDobOrPassword(storedDob?: string | null, inputPass?: string | null): boolean {
+  if (!storedDob || !inputPass) return false;
+  const cleanInput = String(inputPass).trim().replace(/['"]/g, '');
+  const cleanStored = String(storedDob).trim().replace(/['"]/g, '');
+  if (!cleanInput || !cleanStored) return false;
+
+  // 1. Direct exact match
+  if (cleanInput.toLowerCase() === cleanStored.toLowerCase()) return true;
+
+  // 2. Jika input adalah 4 digit tahun (misal: 2011 atau 1975)
+  if (/^\d{4}$/.test(cleanInput)) {
+    if (cleanStored.startsWith(cleanInput) || cleanStored.endsWith(cleanInput)) {
+      return true;
+    }
+  }
+
+  // 3. Normalisasi kedua string tanggal
+  const normInput = normalizeDate(cleanInput);
+  const normStored = normalizeDate(cleanStored);
+
+  if (normInput && normStored && normInput === normStored) {
+    return true;
+  }
+
+  // 4. Perbandingan angka saja (digits only)
+  const inputDigits = cleanInput.replace(/\D/g, '');
+  const storedDigits = cleanStored.replace(/\D/g, '');
+
+  if (inputDigits && storedDigits) {
+    if (inputDigits === storedDigits) return true;
+
+    // Jika salah satunya 4 digit tahun
+    if (inputDigits.length === 4 && storedDigits.startsWith(inputDigits)) return true;
+    if (storedDigits.length === 4 && inputDigits.startsWith(storedDigits)) return true;
+
+    // Periksa kemungkinan format terbalik DMY vs YMD 8 digit
+    if (inputDigits.length === 8 && storedDigits.length === 8) {
+      const storedY = storedDigits.substring(0, 4);
+      const storedM = storedDigits.substring(4, 6);
+      const storedD = storedDigits.substring(6, 8);
+
+      const inputD = inputDigits.substring(0, 2);
+      const inputM = inputDigits.substring(2, 4);
+      const inputY = inputDigits.substring(4, 8);
+
+      if (storedY === inputY && storedM === inputM && storedD === inputD) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**

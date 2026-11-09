@@ -10,7 +10,7 @@
   </div>
 
   <div v-else class="card card-clean border-0 shadow-sm p-3 p-sm-4 bg-white">
-    <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-3">
+    <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-3" style="background-color: #55f5fb;">
       <div>
         <div class="d-flex align-items-center gap-2 mb-1">
           <span 

@@ -139,6 +139,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { dbService } from '../services/db';
+import { realtimeService } from '../services/realtime';
 import type { Statistics, Kandidat, Siswa, Kelas } from '../types';
 
 const isFetching = ref(false);
@@ -159,6 +160,7 @@ const students = ref<Siswa[]>([]);
 const classes = ref<Kelas[]>([]);
 
 let pollingTimer: any = null;
+let unbindRealtime: (() => void) | null = null;
 
 const lastUpdatedText = computed(() => {
   return lastUpdated.value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
@@ -234,10 +236,14 @@ async function fetchData() {
 onMounted(() => {
   fetchData();
   pollingTimer = setInterval(fetchData, 3500); // Poll every 3.5s for real-time live count
+  unbindRealtime = realtimeService.onVoteEvent(() => {
+    fetchData();
+  });
 });
 
 onUnmounted(() => {
   if (pollingTimer) clearInterval(pollingTimer);
+  if (unbindRealtime) unbindRealtime();
 });
 </script>
 

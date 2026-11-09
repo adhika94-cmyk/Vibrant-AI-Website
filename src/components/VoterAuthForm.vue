@@ -60,15 +60,37 @@
 
       <!-- Password Field (DOB / Birth Year) -->
       <div class="mb-4">
-        <label class="form-label fw-semibold text-secondary small mb-1">
-          {{ voterType === 'siswa' ? 'Tanggal Lahir Siswa' : 'Password (Tahun Lahir)' }}
-        </label>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <label class="form-label fw-semibold text-secondary small mb-0">
+            {{ voterType === 'siswa' ? 'Tanggal / Tahun Lahir Siswa' : 'Password (Tahun / Tanggal Lahir)' }}
+          </label>
+          <div v-if="voterType === 'siswa'" class="btn-group btn-group-sm" role="group">
+            <button 
+              type="button" 
+              class="btn btn-outline-secondary py-0 px-2"
+              :class="{ 'active': inputMode === 'text' }"
+              style="font-size: 0.7rem;"
+              @click="inputMode = 'text'"
+            >
+              Ketik Bebas
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-outline-secondary py-0 px-2"
+              :class="{ 'active': inputMode === 'date' }"
+              style="font-size: 0.7rem;"
+              @click="inputMode = 'date'"
+            >
+              Pilih Kalender
+            </button>
+          </div>
+        </div>
         <div class="input-group">
           <span class="input-group-text bg-light text-muted border-end-0">
             <i class="bi" :class="voterType === 'siswa' ? 'bi-calendar-event' : 'bi-shield-lock'"></i>
           </span>
           <input 
-            v-if="voterType === 'siswa'"
+            v-if="voterType === 'siswa' && inputMode === 'date'"
             v-model="form.password"
             type="date" 
             class="form-control border-start-0 ps-0" 
@@ -76,18 +98,27 @@
             autocomplete="current-password"
           />
           <input 
+            v-else-if="voterType === 'siswa' && inputMode === 'text'"
+            v-model.trim="form.password"
+            type="text" 
+            class="form-control border-start-0 ps-0 font-mono-numbers" 
+            placeholder="Contoh: 17-08-2011, 2011-08-17, atau 2011"
+            required
+            autocomplete="current-password"
+          />
+          <input 
             v-else
             v-model.trim="form.password"
             type="text" 
-            maxlength="10"
+            maxlength="20"
             class="form-control border-start-0 ps-0 font-mono-numbers" 
-            placeholder="Tahun Lahir (Contoh: 1975)"
+            placeholder="Tahun / Tanggal Lahir (Contoh: 1975)"
             required
             autocomplete="current-password"
           />
         </div>
         <div class="form-text text-muted" style="font-size: 0.75rem;">
-          {{ voterType === 'siswa' ? 'Gunakan tanggal lahir sesuai akta' : 'Gunakan 4 digit tahun kelahiran Anda' }}
+          {{ voterType === 'siswa' ? 'Mendukung format: DD-MM-YYYY, YYYY-MM-DD, 8 digit angka, atau tahun lahir saja.' : 'Gunakan 4 digit tahun kelahiran atau tanggal lahir Anda.' }}
         </div>
       </div>
 
@@ -133,6 +164,7 @@ import { authService } from '../services/auth';
 const emit = defineEmits(['success']);
 
 const voterType = ref<'siswa' | 'guru'>('siswa');
+const inputMode = ref<'text' | 'date'>('text');
 const loading = ref(false);
 const error = ref('');
 
@@ -156,6 +188,7 @@ const demoAccounts = [
 
 async function useDemo(demo: any) {
   voterType.value = demo.type as 'siswa' | 'guru';
+  inputMode.value = 'text';
   form.identifier = demo.id;
   form.password = demo.pass;
   error.value = '';

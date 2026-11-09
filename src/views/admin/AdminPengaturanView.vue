@@ -248,15 +248,84 @@
         </div>
       </div>
 
-      <!-- ROW 2: KONFIGURASI SUPABASE & SQL SCHEMA VIEWER -->
+      <!-- ROW 2: KONFIGURASI AKSES WI-FI & HP PEMILIH -->
+      <div class="col-12">
+        <div class="card card-clean p-4 border-success-subtle bg-success-subtle bg-opacity-10">
+          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3 border-bottom pb-2">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-wifi text-success fs-4"></i>
+              <div>
+                <div class="d-flex align-items-center gap-2">
+                  <h2 class="h6 fw-bold text-dark mb-0">Akses Jaringan Wi-Fi & Handphone Pemilih (Bilik Suara)</h2>
+                  <span class="badge bg-success text-white font-mono-numbers" style="font-size: 0.7rem;">
+                    HOST: 0.0.0.0:3000 AKTIF
+                  </span>
+                </div>
+                <small class="text-muted">Konfigurasi alamat server & cetak QR Code agar siswa dapat mengakses eOSIS langsung melalui HP di jaringan Wi-Fi sekolah</small>
+              </div>
+            </div>
+
+            <button 
+              type="button" 
+              class="btn btn-success btn-sm d-flex align-items-center gap-1"
+              @click="showWifiModal = true"
+            >
+              <i class="bi bi-qr-code-scan"></i>
+              <span>Buka QR Code & Cetak Poster Bilik Suara</span>
+            </button>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <div class="p-3 bg-white rounded border h-100">
+                <span class="text-muted small d-block mb-1">1. Host Listening Binding</span>
+                <strong class="text-dark d-block">0.0.0.0 (Semua Interface)</strong>
+                <p class="text-muted small mb-0 mt-1" style="font-size: 0.75rem;">
+                  Server Vite dikonfigurasi pada <code>host: 0.0.0.0</code> & port <code>3000</code> sehingga siap diakses oleh perangkat lain di jaringan yang sama.
+                </p>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <div class="p-3 bg-white rounded border h-100">
+                <span class="text-muted small d-block mb-1">2. Akses Tanpa Install Aplikasi</span>
+                <strong class="text-dark d-block">Scan QR Code via Kamera HP</strong>
+                <p class="text-muted small mb-0 mt-1" style="font-size: 0.75rem;">
+                  Siswa cukup menghubungkan smartphone ke Wi-Fi sekolah, scan QR Code, dan langsung masuk ke halaman login responsif.
+                </p>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <div class="p-3 bg-white rounded border h-100">
+                <span class="text-muted small d-block mb-1">3. Poster Cetak A4 Siap Pakai</span>
+                <strong class="text-dark d-block">Poster Petunjuk Bilik Suara</strong>
+                <p class="text-muted small mb-0 mt-1" style="font-size: 0.75rem;">
+                  Dilengkapi fitur cetak otomatis lembar instruksi resmi A4 dengan KOP Sekolah, QR Code besar, dan langkah login NISN.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 3: KONFIGURASI SUPABASE & SQL SCHEMA VIEWER -->
       <div class="col-12">
         <div class="card card-clean p-4">
           <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3 border-bottom pb-2">
             <div class="d-flex align-items-center gap-2">
               <i class="bi bi-database-fill-gear text-success fs-5"></i>
               <div>
-                <h2 class="h6 fw-bold text-dark mb-0">Integrasi Database Supabase</h2>
-                <small class="text-muted">Hubungkan aplikasi langsung ke backend Supabase PostgreSQL</small>
+                <div class="d-flex align-items-center gap-2">
+                  <h2 class="h6 fw-bold text-dark mb-0">Integrasi Database Supabase</h2>
+                  <span 
+                    class="badge d-inline-flex align-items-center gap-1 font-mono-numbers"
+                    :class="isSupabaseActive ? 'bg-success text-white' : 'bg-secondary-subtle text-secondary border'"
+                    style="font-size: 0.7rem;"
+                  >
+                    <i class="bi" :class="isSupabaseActive ? 'bi-check-circle-fill' : 'bi-hdd-fill'"></i>
+                    <span>{{ isSupabaseActive ? 'Supabase Terhubung' : 'Local Storage Engine' }}</span>
+                  </span>
+                </div>
+                <small class="text-muted">Hubungkan aplikasi langsung ke backend Supabase PostgreSQL untuk sinkronisasi multi-perangkat</small>
               </div>
             </div>
 
@@ -270,40 +339,98 @@
             </button>
           </div>
 
+          <!-- Alert Feedback Khusus Supabase (Tampil langsung di dalam card agar pengguna langsung melihat respon tombol) -->
+          <div 
+            v-if="supabaseFeedback" 
+            class="alert alert-dismissible fade show small py-2 px-3 mb-3 border" 
+            :class="{
+              'alert-success border-success-subtle': supabaseFeedback.type === 'success',
+              'alert-danger border-danger-subtle': supabaseFeedback.type === 'danger',
+              'alert-warning border-warning-subtle': supabaseFeedback.type === 'warning',
+              'alert-info border-info-subtle': supabaseFeedback.type === 'info'
+            }"
+            role="alert"
+          >
+            <div class="d-flex align-items-start gap-2">
+              <i 
+                class="bi fs-5 flex-shrink-0" 
+                :class="{
+                  'bi-check-circle-fill text-success': supabaseFeedback.type === 'success',
+                  'bi-exclamation-triangle-fill text-danger': supabaseFeedback.type === 'danger',
+                  'bi-exclamation-circle-fill text-warning': supabaseFeedback.type === 'warning',
+                  'bi-info-circle-fill text-info': supabaseFeedback.type === 'info'
+                }"
+              ></i>
+              <div class="flex-grow-1">
+                <strong v-if="supabaseFeedback.title" class="d-block mb-1">{{ supabaseFeedback.title }}</strong>
+                <span>{{ supabaseFeedback.message }}</span>
+              </div>
+              <button type="button" class="btn-close py-2 ms-auto" @click="supabaseFeedback = null"></button>
+            </div>
+          </div>
+
           <div class="row g-3 mb-4">
             <div class="col-12 col-md-6">
-              <label class="form-label fw-semibold small text-secondary">Supabase Project URL</label>
+              <label class="form-label fw-semibold small text-secondary">
+                Supabase Project URL <span class="text-danger">*</span>
+              </label>
               <input 
                 v-model="supabaseConfig.url" 
                 type="text" 
                 class="form-control font-mono-numbers small" 
+                :class="{ 'is-invalid': supabaseErrors.url }"
                 placeholder="https://xyzcompany.supabase.co"
+                @input="supabaseErrors.url = ''; supabaseFeedback = null"
               />
-              <div class="form-text small text-muted">
+              <div v-if="supabaseErrors.url" class="invalid-feedback small d-block">
+                {{ supabaseErrors.url }}
+              </div>
+              <div v-else class="form-text small text-muted">
                 Dapat diperoleh dari Project Settings > API di dashboard Supabase Anda.
               </div>
             </div>
 
             <div class="col-12 col-md-6">
-              <label class="form-label fw-semibold small text-secondary">Supabase Anon Public Key</label>
+              <label class="form-label fw-semibold small text-secondary">
+                Supabase Anon Public Key <span class="text-danger">*</span>
+              </label>
               <input 
                 v-model="supabaseConfig.key" 
                 type="text" 
                 class="form-control font-mono-numbers small" 
+                :class="{ 'is-invalid': supabaseErrors.key }"
                 placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                @input="supabaseErrors.key = ''; supabaseFeedback = null"
               />
-              <div class="form-text small text-muted">
+              <div v-if="supabaseErrors.key" class="invalid-feedback small d-block">
+                {{ supabaseErrors.key }}
+              </div>
+              <div v-else class="form-text small text-muted">
                 Hanya gunakan <strong>anon public key</strong>. Jangan pernah menempatkan service role key di frontend.
               </div>
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2 mb-4">
-            <button type="button" class="btn btn-primary btn-sm px-3" @click="saveAndTestSupabase" style="background-color: #1d4ed8;">
-              <i class="bi bi-plug-fill me-1"></i>Simpan & Hubungkan Supabase
+          <div class="d-flex flex-wrap gap-2 mb-4 align-items-center">
+            <button 
+              type="button" 
+              class="btn btn-primary btn-sm px-3 d-inline-flex align-items-center gap-1" 
+              @click="saveAndTestSupabase" 
+              :disabled="isConnectingSupabase"
+              style="background-color: #1d4ed8;"
+            >
+              <span v-if="isConnectingSupabase" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              <i v-else class="bi bi-plug-fill me-1"></i>
+              <span>{{ isConnectingSupabase ? 'Menguji & Menghubungkan Supabase...' : 'Simpan & Hubungkan Supabase' }}</span>
             </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm px-3" @click="disconnectSupabase">
-              Gunakan Local Engine Default
+            <button 
+              type="button" 
+              class="btn btn-outline-secondary btn-sm px-3 d-inline-flex align-items-center gap-1" 
+              @click="disconnectSupabase"
+              :disabled="isConnectingSupabase"
+            >
+              <i class="bi bi-hdd-network me-1"></i>
+              <span>Gunakan Local Engine Default</span>
             </button>
           </div>
 
@@ -561,16 +688,26 @@
       </div>
     </div>
 
+    <!-- Modal Konfigurasi Akses Wi-Fi & QR Code Bilik Suara -->
+    <WifiAccessModal 
+      :show="showWifiModal" 
+      :school-name="schoolForm.nama_sekolah" 
+      :school-logo="schoolForm.logo_sekolah" 
+      @close="showWifiModal = false" 
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { dbService } from '../../services/db';
+import WifiAccessModal from '../../components/WifiAccessModal.vue';
 import type { Pengaturan, AdminUser, Statistics } from '../../types';
 
 const defaultLogo = '/src/assets/images/osis_spenda_logo_1793253206503.jpg';
 
+const showWifiModal = ref(false);
 const alertMessage = ref('');
 const errorMessage = ref('');
 const isSqlCopied = ref(false);
@@ -757,6 +894,18 @@ const supabaseConfig = reactive({
   key: ''
 });
 
+const isConnectingSupabase = ref(false);
+const supabaseFeedback = ref<{
+  type: 'success' | 'danger' | 'warning' | 'info';
+  title?: string;
+  message: string;
+} | null>(null);
+
+const supabaseErrors = reactive({
+  url: '',
+  key: ''
+});
+
 const isSupabaseActive = computed(() => dbService.isUsingSupabase());
 
 async function loadData() {
@@ -837,33 +986,100 @@ async function saveAdminCredentials() {
   }
 }
 
-function saveAndTestSupabase() {
+async function saveAndTestSupabase() {
   alertMessage.value = '';
   errorMessage.value = '';
+  supabaseFeedback.value = null;
+  supabaseErrors.url = '';
+  supabaseErrors.key = '';
 
-  const cleanUrl = supabaseConfig.url.trim();
-  const cleanKey = supabaseConfig.key.trim();
+  let cleanUrl = (supabaseConfig.url || '').trim();
+  let cleanKey = (supabaseConfig.key || '').trim();
 
-  if (!cleanUrl || !cleanKey) {
-    errorMessage.value = 'URL Supabase dan Anon Key wajib diisi.';
+  let hasError = false;
+  if (!cleanUrl) {
+    supabaseErrors.url = 'Supabase Project URL wajib diisi.';
+    hasError = true;
+  }
+  if (!cleanKey) {
+    supabaseErrors.key = 'Supabase Anon Public Key wajib diisi.';
+    hasError = true;
+  }
+
+  if (hasError) {
+    supabaseFeedback.value = {
+      type: 'danger',
+      title: 'Formulir Belum Lengkap',
+      message: 'Silakan isi Supabase Project URL dan Anon Public Key terlebih dahulu sebelum menghubungkan.'
+    };
     return;
   }
 
-  const success = dbService.setCustomSupabaseConfig(cleanUrl, cleanKey);
-  if (success) {
-    alertMessage.value = 'Koneksi ke project Supabase berhasil diaktifkan!';
-    runDiagnostics();
-  } else {
-    errorMessage.value = 'Format URL atau Key Supabase tidak valid.';
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    cleanUrl = 'https://' + cleanUrl;
+    supabaseConfig.url = cleanUrl;
+  }
+  cleanUrl = cleanUrl.replace(/\/+$/, '');
+  supabaseConfig.url = cleanUrl;
+
+  isConnectingSupabase.value = true;
+  try {
+    const testResult = await dbService.testSupabaseConnection(cleanUrl, cleanKey);
+    if (!testResult.success) {
+      supabaseFeedback.value = {
+        type: 'danger',
+        title: 'Koneksi Supabase Gagal',
+        message: testResult.message
+      };
+      return;
+    }
+
+    const success = dbService.setCustomSupabaseConfig(cleanUrl, cleanKey);
+    if (success) {
+      if (testResult.hasTables === false) {
+        supabaseFeedback.value = {
+          type: 'warning',
+          title: 'Terhubung ke Host Supabase (Tabel Belum Dibuat)',
+          message: testResult.message
+        };
+      } else {
+        supabaseFeedback.value = {
+          type: 'success',
+          title: 'Supabase Berhasil Terhubung!',
+          message: 'Koneksi ke project Supabase berhasil diaktifkan dan seluruh tabel terverifikasi siap digunakan.'
+        };
+      }
+      await runDiagnostics();
+    } else {
+      supabaseFeedback.value = {
+        type: 'danger',
+        title: 'Konfigurasi Tidak Valid',
+        message: 'Format URL atau Key Supabase tidak dapat diinisialisasi.'
+      };
+    }
+  } catch (err: any) {
+    supabaseFeedback.value = {
+      type: 'danger',
+      title: 'Terjadi Kesalahan',
+      message: err.message || 'Gagal menghubungkan ke Supabase.'
+    };
+  } finally {
+    isConnectingSupabase.value = false;
   }
 }
 
 function disconnectSupabase() {
   supabaseConfig.url = '';
   supabaseConfig.key = '';
+  supabaseErrors.url = '';
+  supabaseErrors.key = '';
   dbService.setCustomSupabaseConfig('', '');
   diagData.value = null;
-  alertMessage.value = 'Beralih ke Local Database Engine terintegrasi.';
+  supabaseFeedback.value = {
+    type: 'info',
+    title: 'Mode Database Lokal',
+    message: 'Sistem telah kembali menggunakan Local Database Engine bawaan browser (IndexedDB/LocalStorage).'
+  };
 }
 
 async function copySqlScript() {

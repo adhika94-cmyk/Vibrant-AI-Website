@@ -438,9 +438,9 @@
                   ref="nisnInputRef"
                   v-model="formData.nisn" 
                   type="text" 
-                  maxlength="10"
+                  :maxlength="formData.kategori === 'guru' ? 30 : 10" 
                   class="form-control font-mono-numbers" 
-                  placeholder="Contoh: 0081234501"
+                  :placeholder="formData.kategori === 'guru' ? 'Contoh NIP/ID: 197501012005011001' : 'Contoh NISN: 0081234501'"
                   required
                 />
               </div>

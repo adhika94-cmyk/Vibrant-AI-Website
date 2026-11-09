@@ -1,8 +1,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { ref } from 'vue';
 import type { Kelas, Siswa, Kandidat, Pengaturan, AdminUser, VoteResult, Statistics } from '../types';
 import { hashPassword } from '../utils/crypto';
 import { getIdbItem, setIdbItem, removeIdbItem } from '../utils/idb';
-import { isValidUUID, normalizeDate, normalizeClassName } from '../utils/studentParser';
+import { isValidUUID, normalizeDate, normalizeClassName, matchDobOrPassword } from '../utils/studentParser';
+import { realtimeService } from './realtime';
 
 // Kumpulan nama Indonesia untuk Generator DPT Massal tak terbatas
 const FIRST_NAMES = [
@@ -133,6 +135,7 @@ const INITIAL_SETTINGS: Pengaturan = {
 class DatabaseService {
   private supabase: SupabaseClient | null = null;
   private isSupabaseEnabled: boolean = false;
+  public isSupabaseEnabledRef = ref<boolean>(false);
 
   constructor() {
     this.initDatabase();
@@ -189,6 +192,39 @@ class DatabaseService {
 
     // 2. Cek koneksi Supabase
     this.setupSupabaseClient();
+
+    // 3. Sinkronisasi dengan server backend pusat untuk multi-perangkat Wi-Fi
+    this.syncWithServer();
+  }
+
+  public async syncWithServer(): Promise<void> {
+    try {
+      const res = await fetch('/api/bootstrap');
+      if (res.ok) {
+        const data = await res.json();
+        // Jika server memiliki konfigurasi Supabase dan client belum mengaktifkannya
+        if (data.supabase_url && data.supabase_key && !this.isUsingSupabase()) {
+          console.log('[eOSIS Client] Menghubungkan otomatis ke Supabase dari server pusat...');
+          this.setCustomSupabaseConfig(data.supabase_url, data.supabase_key);
+        }
+        // Sinkronisasi data DPT dari server jika lokal kosong atau lebih sedikit
+        if (data.total_siswa > 0) {
+          const localList = await this.getRawSiswaList();
+          if (localList.length < data.total_siswa) {
+            const siswaRes = await fetch('/api/siswa');
+            if (siswaRes.ok) {
+              const siswaJson = await siswaRes.json();
+              if (siswaJson.success && Array.isArray(siswaJson.data)) {
+                console.log(`[eOSIS Client] Memperbarui ${siswaJson.data.length} data DPT dari server pusat...`);
+                await this.persistSiswaList(siswaJson.data);
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // offline / standalone
+    }
   }
 
   public setupSupabaseClient(): boolean {
@@ -208,26 +244,44 @@ class DatabaseService {
       }
     }
 
-    if (supabaseUrl && supabaseKey && supabaseUrl.startsWith('http')) {
+    let cleanUrl = (supabaseUrl || '').trim();
+    if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    const cleanKey = (supabaseKey || '').trim();
+
+    if (cleanUrl && cleanKey && cleanUrl.startsWith('http')) {
       try {
-        this.supabase = createClient(supabaseUrl, supabaseKey);
+        this.supabase = createClient(cleanUrl, cleanKey);
         this.isSupabaseEnabled = true;
+        this.isSupabaseEnabledRef.value = true;
+        // Inisialisasi Supabase Realtime Channel
+        realtimeService.initRealtime(this.supabase);
         return true;
       } catch (err) {
         console.warn('Supabase client init failed, fallback to local DB', err);
         this.supabase = null;
         this.isSupabaseEnabled = false;
+        this.isSupabaseEnabledRef.value = false;
+        realtimeService.initRealtime(null);
         return false;
       }
     } else {
       this.supabase = null;
       this.isSupabaseEnabled = false;
+      this.isSupabaseEnabledRef.value = false;
+      realtimeService.initRealtime(null);
       return false;
     }
   }
 
+  public getSupabaseClient(): SupabaseClient | null {
+    return this.supabase;
+  }
+
   public isUsingSupabase(): boolean {
-    return this.isSupabaseEnabled && this.supabase !== null;
+    return this.isSupabaseEnabledRef.value && this.supabase !== null;
   }
 
   public setCustomSupabaseConfig(url: string, key: string): boolean {
@@ -235,10 +289,110 @@ class DatabaseService {
       localStorage.removeItem(STORAGE_KEYS.SUPABASE_CONFIG);
       this.supabase = null;
       this.isSupabaseEnabled = false;
+      this.isSupabaseEnabledRef.value = false;
+      realtimeService.initRealtime(null);
+      if (typeof fetch !== 'undefined') {
+        fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: '', key: '' })
+        }).catch(() => {});
+      }
       return false;
     }
-    localStorage.setItem(STORAGE_KEYS.SUPABASE_CONFIG, JSON.stringify({ url, key }));
+    let cleanUrl = url.trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    const cleanKey = key.trim();
+
+    localStorage.setItem(STORAGE_KEYS.SUPABASE_CONFIG, JSON.stringify({ url: cleanUrl, key: cleanKey }));
+    
+    // Sinkronkan ke backend server agar seluruh HP pemilih di Wi-Fi otomatis terhubung
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cleanUrl, key: cleanKey })
+      }).catch(() => {});
+    }
+
     return this.setupSupabaseClient();
+  }
+
+  public async testSupabaseConnection(url: string, key: string): Promise<{
+    success: boolean;
+    message: string;
+    hasTables?: boolean;
+  }> {
+    let cleanUrl = (url || '').trim();
+    if (cleanUrl && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+    cleanUrl = cleanUrl.replace(/\/+$/, '');
+    const cleanKey = (key || '').trim();
+
+    if (!cleanUrl || !cleanKey) {
+      return {
+        success: false,
+        message: 'Supabase Project URL dan Anon Public Key wajib diisi.'
+      };
+    }
+
+    try {
+      const testClient = createClient(cleanUrl, cleanKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+      });
+
+      const { error, status } = await testClient
+        .from('siswa')
+        .select('id', { count: 'exact', head: true });
+
+      if (error) {
+        if (
+          error.code === '42P01' ||
+          error.message?.toLowerCase().includes('does not exist') ||
+          error.message?.toLowerCase().includes('relation "public.siswa"') ||
+          error.message?.toLowerCase().includes('relation "siswa"')
+        ) {
+          return {
+            success: true,
+            hasTables: false,
+            message: 'Koneksi ke project Supabase berhasil terhubung! Namun tabel database belum dibuat. Silakan salin & jalankan script SQL Supabase di menu SQL Editor Supabase.'
+          };
+        }
+
+        if (
+          status === 401 ||
+          status === 403 ||
+          error.message?.toLowerCase().includes('jwt') ||
+          error.message?.toLowerCase().includes('apikey') ||
+          error.message?.toLowerCase().includes('api key')
+        ) {
+          return {
+            success: false,
+            message: 'Kunci Anon Public Key tidak valid. Mohon periksa kembali di dashboard Supabase > Project Settings > API.'
+          };
+        }
+
+        return {
+          success: false,
+          message: `Gagal terhubung ke Supabase: ${error.message}`
+        };
+      }
+
+      return {
+        success: true,
+        hasTables: true,
+        message: 'Koneksi ke Supabase berhasil! Tabel database terverifikasi siap digunakan.'
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Gagal menghubungi host Supabase (${err.message || 'Network Error'}). Pastikan URL project benar.`
+      };
+    }
   }
 
   public getSupabaseConfig(): { url: string; key: string } {
@@ -534,7 +688,21 @@ class DatabaseService {
       console.warn('Gagal membaca data siswa dari LocalStorage', e);
     }
 
-    // 3. Fallback hanya jika belum pernah diinisialisasi sama sekali
+    // 3. Coba ambil dari Server Backend jika ada
+    try {
+      const serverRes = await fetch('/api/siswa');
+      if (serverRes.ok) {
+        const json = await serverRes.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          this.siswaMemoryCache = json.data;
+          await setIdbItem(STORAGE_KEYS.SISWA, json.data);
+          try { localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(json.data)); } catch {}
+          return [...json.data];
+        }
+      }
+    } catch {}
+
+    // 4. Fallback hanya jika belum pernah diinisialisasi sama sekali
     this.siswaMemoryCache = [...INITIAL_STUDENTS];
     await this.persistSiswaList(INITIAL_STUDENTS);
     return [...INITIAL_STUDENTS];
@@ -554,6 +722,15 @@ class DatabaseService {
       localStorage.setItem(STORAGE_KEYS.SISWA, JSON.stringify(list));
     } catch (quotaErr) {
       console.info('[eOSIS] Ukuran DPT siswa melampaui kuota LocalStorage 5MB. Data tersimpan aman di IndexedDB (Unlimited Capacity).', quotaErr);
+    }
+
+    // Sinkronkan ke server backend agar semua perangkat di jaringan Wi-Fi memiliki data siswa yang sama
+    if (typeof fetch !== 'undefined') {
+      fetch('/api/siswa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list)
+      }).catch(err => console.warn('[eOSIS] Gagal sync siswa ke backend server:', err));
     }
   }
 
@@ -591,6 +768,9 @@ class DatabaseService {
           } else {
             list = data.map((item: any) => ({
               ...item,
+              nama: item.nama || item.nama_lengkap || 'Pemilih',
+              sudah_memilih: Boolean(item.sudah_memilih || item.has_voted),
+              kategori: item.kategori || (item.nisn && item.nisn.length > 12 ? 'guru' : 'siswa'),
               kelas_nama: item.kelas?.nama_kelas || kelasMap.get(item.kelas_id) || item.kelas_nama || '-'
             }));
             this.siswaMemoryCache = [...list];
@@ -628,16 +808,12 @@ class DatabaseService {
   }
 
   public async findSiswaByNisnAndDob(nisn: string, dob: string): Promise<Siswa | null> {
-    const cleanNisnInput = String(nisn).trim().replace(/[^0-9a-zA-Z]/g, '');
-    const cleanDobRaw = String(dob).trim();
-    
-    // Deteksi jika input password adalah tahun saja (4 digit)
-    const isYearOnly = cleanDobRaw.length === 4 && /^\d{4}$/.test(cleanDobRaw);
-    const cleanDobInput = isYearOnly ? cleanDobRaw : normalizeDate(cleanDobRaw);
+    const cleanNisnInput = String(nisn || '').trim().replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+    const cleanDobRaw = String(dob || '').trim();
 
-    console.log(`[Auth] Attempting login for Identifier: ${cleanNisnInput}, Password: ${cleanDobRaw} (isYearOnly: ${isYearOnly}, normalized: ${cleanDobInput})`);
+    console.log(`[Auth] Attempting login for Identifier: ${cleanNisnInput}, Password: ${cleanDobRaw}`);
 
-    if (!cleanNisnInput || !cleanDobInput) {
+    if (!cleanNisnInput || !cleanDobRaw) {
       console.warn('[Auth] Invalid input: empty NISN or DOB');
       return null;
     }
@@ -647,55 +823,64 @@ class DatabaseService {
     // 1. Coba cari di Supabase (jika aktif)
     if (this.isUsingSupabase()) {
       try {
-        let query = this.supabase!
+        const { data, error } = await this.supabase!
           .from('siswa')
           .select('*, kelas(nama_kelas)')
-          .eq('nisn', cleanNisnInput);
-        
-        if (isYearOnly) {
-          // Pencarian berdasarkan tahun saja (untuk Guru)
-          query = query
-            .gte('tanggal_lahir', `${cleanDobInput}-01-01`)
-            .lte('tanggal_lahir', `${cleanDobInput}-12-31`);
-        } else {
-          // Pencarian tanggal lahir lengkap (untuk Siswa)
-          query = query.eq('tanggal_lahir', cleanDobInput);
-        }
+          .ilike('nisn', cleanNisnInput)
+          .maybeSingle();
 
-        const { data, error } = await query.maybeSingle();
         if (data && !error) {
-          console.log('[Auth] Found voter in Supabase:', data.nama);
-          foundSiswa = {
-            ...data,
-            kelas_nama: data.kelas?.nama_kelas || '-'
-          };
+          const isPassMatch = matchDobOrPassword(data.tanggal_lahir, cleanDobRaw);
+          if (isPassMatch) {
+            console.log('[Auth] Found voter in Supabase:', data.nama_lengkap || data.nama);
+            foundSiswa = {
+              id: data.id,
+              nisn: data.nisn,
+              nama: data.nama || data.nama_lengkap || 'Pemilih',
+              tanggal_lahir: data.tanggal_lahir,
+              kelas_id: data.kelas_id,
+              kelas_nama: data.kelas?.nama_kelas || '-',
+              sudah_memilih: Boolean(data.sudah_memilih || data.has_voted),
+              waktu_memilih: data.waktu_memilih || data.voted_at || null,
+              kategori: data.kategori || (data.nisn && data.nisn.length > 12 ? 'guru' : 'siswa')
+            };
+          }
         }
       } catch (e) {
         console.warn('[Auth] Supabase lookup exception:', e);
       }
     }
 
-    // 2. Jika belum ditemukan di Supabase, cari di database lokal (IndexedDB/LocalStorage)
+    // 2. Coba cari di Server Backend Terpusat (untuk perangkat lain di jaringan Wi-Fi)
+    if (!foundSiswa) {
+      try {
+        const res = await fetch('/api/auth/voter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nisn: cleanNisnInput, password: cleanDobRaw })
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.siswa) {
+            console.log('[Auth] Found voter via Central Server API:', json.siswa.nama);
+            foundSiswa = json.siswa;
+          }
+        }
+      } catch (err) {
+        console.warn('[Auth] Server API lookup warning:', err);
+      }
+    }
+
+    // 3. Jika belum ditemukan, cari di database lokal (IndexedDB/LocalStorage)
     if (!foundSiswa) {
       const students = await this.getRawSiswaList();
       console.log(`[Auth] Searching in ${students.length} local records...`);
       
       const found = students.find(s => {
-        // Bersihkan NISN tersimpan untuk perbandingan
-        const sNisn = String(s.nisn || '').trim().replace(/[^0-9a-zA-Z]/g, '');
+        const sNisn = String(s.nisn || '').trim().replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
         if (sNisn !== cleanNisnInput) return false;
 
-        // Normalisasi tanggal tersimpan
-        const storedDob = normalizeDate(s.tanggal_lahir);
-        if (!storedDob) return false;
-
-        if (isYearOnly) {
-          // Guru: Bandingkan tahun saja (prefix 4 digit YYYY)
-          return storedDob.startsWith(cleanDobInput);
-        } else {
-          // Siswa: Bandingkan tanggal lengkap (YYYY-MM-DD)
-          return storedDob === cleanDobInput;
-        }
+        return matchDobOrPassword(s.tanggal_lahir, cleanDobRaw);
       });
 
       if (found) {
@@ -710,7 +895,7 @@ class DatabaseService {
     }
 
     if (!foundSiswa) {
-      console.warn(`[Auth] Voter NOT FOUND: ${cleanNisnInput} with ${isYearOnly ? 'Year' : 'DOB'} ${cleanDobInput}`);
+      console.warn(`[Auth] Voter NOT FOUND: ${cleanNisnInput} with Password ${cleanDobRaw}`);
     }
 
     return foundSiswa;
@@ -789,9 +974,10 @@ class DatabaseService {
         const payloadToDb: any = {
           nisn: saved.nisn,
           nama: saved.nama,
+          nama_lengkap: saved.nama,
           tanggal_lahir: saved.tanggal_lahir,
           sudah_memilih: saved.sudah_memilih,
-          kategori: saved.kategori || 'siswa',
+          has_voted: saved.sudah_memilih,
           ...(supaKelasId ? { kelas_id: supaKelasId } : {})
         };
 
@@ -1064,9 +1250,10 @@ class DatabaseService {
       return {
         nisn: s.nisn,
         nama: s.nama,
-        tanggal_lahir: normalizeDate(s.tanggal_lahir),
-        sudah_memilih: s.sudah_memilih,
-        kategori: s.kategori || 'siswa',
+        nama_lengkap: s.nama,
+        tanggal_lahir: normalizeDate(s.tanggal_lahir) || s.tanggal_lahir,
+        sudah_memilih: Boolean(s.sudah_memilih),
+        has_voted: Boolean(s.sudah_memilih),
         ...(supaKelasId ? { kelas_id: supaKelasId } : {})
       };
     });
@@ -1315,6 +1502,12 @@ class DatabaseService {
         }
 
         if (data) {
+          if (data.success) {
+            // Broadcast notifikasi real-time ke admin
+            realtimeService.broadcastVoteCast({
+              kategori: 'siswa'
+            }).catch(e => console.warn('[Realtime] Supabase RPC broadcast error:', e));
+          }
           return {
             success: data.success,
             message: data.message,
@@ -1364,6 +1557,12 @@ class DatabaseService {
       waktu: new Date().toISOString()
     });
     localStorage.setItem(STORAGE_KEYS.SUARA_LEDGER, JSON.stringify(ledger));
+
+    // Broadcast notifikasi real-time ke admin
+    realtimeService.broadcastVoteCast({
+      kategori: student.kategori || 'siswa',
+      kelas: student.kelas_nama
+    }).catch(e => console.warn('[Realtime] Local broadcast error:', e));
 
     return {
       success: true,

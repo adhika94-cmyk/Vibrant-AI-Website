@@ -18,6 +18,10 @@
           <i class="bi bi-person-plus-fill"></i>
           <span>Tambah Pemilih</span>
         </button>
+        <button type="button" class="btn btn-success btn-sm d-flex align-items-center gap-1" @click="showWifiModal = true">
+          <i class="bi bi-qr-code-scan"></i>
+          <span>Akses Wi-Fi & HP Pemilih</span>
+        </button>
         <router-link to="/admin/perolehan-suara" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1">
           <i class="bi bi-file-earmark-pdf-fill"></i>
           <span>Ekspor Rekapitulasi (PDF/Excel)</span>
@@ -36,6 +40,52 @@
       <button type="button" class="btn-close py-2" @click="alertMessage = ''"></button>
     </div>
 
+    <!-- REAL-TIME LIVE NOTIFICATION ACTIVITY FEED BANNER -->
+    <div class="card card-clean border-0 shadow-sm p-3 mb-4 bg-white">
+      <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <div class="p-2 rounded-3 bg-success-subtle text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
+            <i class="bi bi-broadcast fs-4"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+              <span class="fw-bold text-dark fs-6">Pemantauan Suara Real-Time (Supabase)</span>
+              <span 
+                class="badge d-inline-flex align-items-center gap-1 font-mono-numbers"
+                :class="isRealtimeConnected ? 'bg-success text-white' : 'bg-primary-subtle text-primary border border-primary-subtle'"
+                style="font-size: 0.675rem;"
+              >
+                <span class="pulse-dot bg-white"></span>
+                <span>{{ isRealtimeConnected ? 'Supabase Realtime Terhubung' : 'Realtime Aktif' }}</span>
+              </span>
+            </div>
+            <div v-if="latestNotification" class="d-flex flex-wrap align-items-center gap-2 text-dark small">
+              <span class="badge bg-success-subtle text-success border border-success-subtle font-mono-numbers">
+                <i class="bi bi-check2-circle me-1"></i>Aktivitas Terkini
+              </span>
+              <strong class="text-success">{{ latestNotification.message }}</strong>
+              <span class="text-muted font-mono-numbers">· {{ formatTime(latestNotification.timestamp) }} ({{ formatRelative(latestNotification.timestamp) }})</span>
+            </div>
+            <div v-else class="text-muted small">
+              Menunggu aktivitas pemilih... Ketika seorang siswa memberikan suara, notifikasi akan langsung muncul di sini secara real-time.
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <button 
+            type="button" 
+            class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1"
+            @click="triggerTestVoteNotification"
+            title="Simulasikan notifikasi suara masuk untuk pengujian"
+          >
+            <i class="bi bi-bell-fill"></i>
+            <span>Uji Notifikasi</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- COUNTDOWN JELANG WAKTU PEMILIHAN -->
     <div class="mb-4">
       <ElectionCountdown 
@@ -43,6 +93,39 @@
         :end-time="settings.waktu_selesai" 
         :voting-dibuka="settings.voting_dibuka"
       />
+    </div>
+
+    <!-- KARTU AKSES BILIK SUARA & WI-FI PEMILIH -->
+    <div class="card card-clean border-0 shadow-sm p-3 mb-4 bg-white border-start border-4 border-success">
+      <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <div class="p-2 rounded-3 bg-success-subtle text-success d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
+            <i class="bi bi-phone-vibrate fs-4"></i>
+          </div>
+          <div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+              <span class="fw-bold text-dark fs-6">Akses Pemilihan via Wi-Fi & Handphone (Bilik Suara)</span>
+              <span class="badge bg-success text-white font-mono-numbers" style="font-size: 0.675rem;">
+                <i class="bi bi-broadcast me-1"></i>0.0.0.0:3000 AKTIF
+              </span>
+            </div>
+            <p class="text-muted small mb-0">
+              Siswa & Guru dapat memberikan suara langsung dari HP masing-masing melalui jaringan Wi-Fi sekolah cukup dengan scan QR Code.
+            </p>
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <button 
+            type="button" 
+            class="btn btn-outline-success btn-sm d-flex align-items-center gap-1"
+            @click="showWifiModal = true"
+          >
+            <i class="bi bi-qr-code-scan"></i>
+            <span>Tampilkan QR Code Bilik Suara</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 6 KPI STATISTIC CARDS -->
@@ -167,6 +250,14 @@
 
     <!-- REAL-TIME QUICK COUNT HASIL PEMILIHAN -->
     <QuickCountWidget class="mb-4" />
+
+    <!-- D3.JS REAL-TIME VISUALIZATION (GRAFIK BATANG & LINGKARAN) -->
+    <D3VoteChart 
+      :candidates="kandidatList" 
+      :total-votes="stats.totalSuaraMasuk" 
+      @refresh="refreshData" 
+      class="mb-4" 
+    />
 
     <!-- SECTION QUICK CANDIDATES SUMMARY -->
     <div class="row g-4">
@@ -412,15 +503,31 @@
       </div>
     </div>
 
+    <!-- Modal Akses Wi-Fi & QR Code Bilik Suara -->
+    <WifiAccessModal 
+      :show="showWifiModal" 
+      :school-name="settings.nama_sekolah" 
+      :school-logo="settings.logo_sekolah" 
+      @close="showWifiModal = false" 
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { dbService } from '../../services/db';
+import { realtimeService } from '../../services/realtime';
 import type { Statistics, Kandidat, Pengaturan, Kelas } from '../../types';
 import ElectionCountdown from '../../components/ElectionCountdown.vue';
 import QuickCountWidget from '../../components/QuickCountWidget.vue';
+import D3VoteChart from '../../components/D3VoteChart.vue';
+import WifiAccessModal from '../../components/WifiAccessModal.vue';
+
+const showWifiModal = ref(false);
+const isRealtimeConnected = computed(() => realtimeService.isConnected.value);
+const latestNotification = computed(() => realtimeService.notifications.value[0] || null);
+let unsubscribeVoteListener: (() => void) | null = null;
 
 const defaultLogo = '/src/assets/images/osis_spenda_logo_1793253206503.jpg';
 
@@ -545,7 +652,60 @@ async function saveQuickSiswa(continuous: boolean = false) {
   }
 }
 
+function triggerTestVoteNotification() {
+  realtimeService.broadcastVoteCast({
+    kategori: 'siswa',
+    message: 'Siswa baru saja memberikan suara'
+  });
+}
+
+function formatTime(iso: string) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+}
+
+function formatRelative(iso: string) {
+  if (!iso) return '';
+  const now = Date.now();
+  const past = new Date(iso).getTime();
+  const diffSec = Math.floor((now - past) / 1000);
+  if (diffSec < 5) return 'Baru saja';
+  if (diffSec < 60) return `${diffSec} dtk lalu`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} mnt lalu`;
+  return `${Math.floor(diffMin / 60)} jam lalu`;
+}
+
 onMounted(() => {
   refreshData();
+
+  // Dengarkan siaran real-time setiap kali seorang siswa berhasil memberikan suara
+  unsubscribeVoteListener = realtimeService.onVoteEvent(() => {
+    console.log('[AdminBeranda] Menerima sinyal suara masuk, memperbarui data live...');
+    refreshData();
+  });
+});
+
+onUnmounted(() => {
+  if (unsubscribeVoteListener) {
+    unsubscribeVoteListener();
+  }
 });
 </script>
+
+<style scoped>
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulseDot 1.5s infinite;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+</style>
